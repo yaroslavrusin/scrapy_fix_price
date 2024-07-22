@@ -97,7 +97,6 @@ PROXY_IP = ''
 PROXY_PORT = 0
 
 # settings for fix price
-REGION_NUMBER = 55
-MAX_ITEMS_TO_PAGE = 28
+REGION_NUMBER = 3
 BASE_URL_API = 'https://api.fix-price.com/buyer/v1/'
 BASE_URL = 'https://fix-price.com/catalog/'

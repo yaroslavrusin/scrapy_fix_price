@@ -7,6 +7,7 @@ from enum import StrEnum
 
 
 class MarketingTags(StrEnum):
+    """Маркировка для товара"""
     specialPrice = 'Спец цена'
     isFresh = 'Свежий'
     isNew = 'Новый'

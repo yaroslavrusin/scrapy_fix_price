@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from functools import partial
 from typing import Iterable
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, parse_qsl, urlencode
 
 import scrapy
 from scrapy import Request
@@ -13,39 +13,59 @@ from fix_price.items import FixPriceItem, MarketingTags
 
 
 class FixPriceSpider(scrapy.Spider):
+    """Класса для парсинка товаров в категории"""
     name = 'fix_price'
 
     def start_requests(self) -> Iterable[Request]:
-        urls = [
-            'https://fix-price.com/catalog/dlya-doma',
-        ]
-        for url in urls:
+        for url in utils.get_urls():
             category = f'{urlparse(url).path.lstrip('catalog/')}'
-            url_to_api = urljoin(settings.BASE_URL_API, f'product/in/{category}') + '?page=1'
+            param = {
+                'page': 1,
+                'limit': 24,
+                'sort': 'sold'
+            }
+            url_to_api = f"{urljoin(settings.BASE_URL_API, f'product/in/{category}')}?{urlencode(param)}"
+            body_request = {
+                'category': category,
+                'brand': [],
+                'price': [],
+                'isDividedPrice': False,
+                'isNew': False,
+                'isHit': False,
+                'isSpecialPrice': False
+            }
             yield scrapy.Request(
                 url_to_api,
-                callback=self.parse,
-                method='POST'
+                callback=partial(self.parse, body_request=body_request),
+                method='POST',
+                body=json.dumps(body_request)
             )
 
     def get_item_parse(self, response, item: FixPriceItem = None, **kwargs):
         item_response = json.loads(response.text)
-        id_main_image = item_response['image']
         if item_response['video']:
-            item.assets['video'].append(f'https://www.youtube.com/watch?v={item_response.get('video')}')
-        for image in item_response['images']:
-            if image['id'] == id_main_image:
-                item.assets['main_image'] = image['src']
-            item.assets['set_images'].append(image['src'])
-        item.metadata['__description'] = item_response.get('description')
+            item.assets['video'].append(f'https://www.youtube.com/watch?v={item_response['video']}')
+        id_main_image = item_response['image']
+        if id_main_image:
+            for image in item_response['images']:
+                if image['id'] == id_main_image:
+                    item.assets['main_image'] = image['src']
+                item.assets['set_images'].append(image['src'])
+        item.metadata['__description'] = item_response['description'].strip()
         if item_response.get('properties'):
-            for feature in item_response.get('properties'):
+            for feature in item_response['properties']:
                 alias = feature['alias']
                 value = feature['value']
                 item.metadata[alias] = value
+        if item_response['variants']:
+            variant = item_response['variants'][0]
+            if variant:
+                dimensions = variant['dimensions']
+                if dimensions:
+                    item.metadata.update(dimensions)
         yield item
 
-    def parse(self, response, **kwargs):
+    def parse(self, response, body_request=None, **kwargs):
         json_response = json.loads(response.text)
         for item_response in json_response:
             item = FixPriceItem(
@@ -96,7 +116,9 @@ class FixPriceSpider(scrapy.Spider):
                 item.marketing_tags.append(MarketingTags.unit)
             if item_response['specialPrice']:
                 item.marketing_tags.append(MarketingTags.specialPrice)
-            item.brand = item_response['brand']['title']
+            brand = item_response['brand']
+            if brand:
+                item.brand = brand['title']
             category = item_response['category']
             if category:
                 utils.add_section(item, category)
@@ -118,25 +140,31 @@ class FixPriceSpider(scrapy.Spider):
             if item_response['inStock']:
                 item.stock = {
                     'in_stock': True,
-                    'count': int(item_response.get('inStock'))
+                    'count': int(item_response['inStock'])
                 }
             variant_count = item_response['variantCount']
             if variant_count:
                 item.variants = int(variant_count)
             url = item_response['url']
             if url:
-                url_item = urljoin(settings.BASE_URL_API, f"product/{item_response.get('url')}")
+                url_item = urljoin(settings.BASE_URL_API, f"product/{item_response['url']}")
                 yield scrapy.Request(
                     url_item,
                     method='GET',
-                    callback=partial(self.get_item_parse, item=item)
+                    callback=partial(self.get_item_parse, item=item),
+                    body=json.dumps(body_request)
                 )
 
-        if len(json_response) >= settings.MAX_ITEMS_TO_PAGE:
+        if len(json_response) > 0:
             url = urlparse(response.url)
-            page = int(url.query.lstrip('page='))
-            next_page = page + 1
-            url_to_api = urljoin(f'{url.scheme}://{url.netloc}', url.path) + f'?page={next_page}'
+            param = parse_qsl(url.query)
+            next_page = int(param[0][1]) + 1
+            param = {
+                'page': next_page,
+                'limit': 24,
+                'sort': 'sold'
+            }
+            url_to_api = f"{urljoin(f'{url.scheme}://{url.netloc}', url.path)}?{urlencode(param)}"
             yield scrapy.Request(
                 url_to_api,
                 callback=self.parse,
