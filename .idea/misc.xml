@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Black">
+    <option name="sdkName" value="Poetry (scrapy_fix_price)" />
+  </component>
+  <component name="GitLabDefaultAccount">
+    <option name="defaultAccountId" value="a51aaa39-d807-4dea-b1a8-535c6f0daaa6" />
+  </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="Poetry (scrapy_fix_price)" project-jdk-type="Python SDK" />
+</project>
